@@ -9,10 +9,11 @@ AI::AI(
     unsigned agent_speed,
     std::mt19937_64 * rng,
     Symbols symbols,
-    Costs costs
+    Costs costs,
+    int max_turn
 )
   : id(id), agent_speed(agent_speed), rng(rng),
-    symbols(symbols), costs(costs)
+    symbols(symbols), costs(costs), max_turn(max_turn)
 {}
 
 void AI::PrintPercepts(const Percepts & percepts) {

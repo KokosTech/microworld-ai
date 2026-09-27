@@ -3,7 +3,7 @@
 Agent::Agent() {}
 Agent::Agent(
 	     Vec2 loc, Vec2 heading, AgentSight sight, unsigned id, std::mt19937_64* rng,
-	     unsigned speed, AgentType type, Symbols symbols, Costs costs) 
+	     unsigned speed, AgentType type, Symbols symbols, Costs costs, int max_turn) 
   : loc(loc), heading(heading), sight(sight), id(id), state(AgentState::Active),
     speed(speed), type(type), points(0)
 {
@@ -13,7 +13,7 @@ Agent::Agent(
   // else if (type == AgentType::HOUND) {
   //     ai = std::make_unique<HoundAI>(id, speed, rng);
   // }
-  ai = std::make_unique<AI>(id, speed, rng, symbols, costs);
+  ai = std::make_unique<AI>(id, speed, rng, symbols, costs, max_turn);
 }
 unsigned Agent::GetID() const { return id; }
 Vec2 Agent::GetLoc() const { return loc; }

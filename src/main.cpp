@@ -6,7 +6,11 @@
  * adopted from a previous microworld in July 2026
  * 
  * HISTORY
- * 
+ *
+ * Version 1.1
+ * - Fixes uninitialized treasures variables.
+ * - Adds max_turn member data to AI class.
+ *
  * Version 1.0
  * - Initial version
  */
@@ -178,7 +182,8 @@ int main(int argc, char **argv) {
             world.config.agent_speed,
             AgentType::AGENT,
             world.GetSymbols(),
-	    world.GetCosts()
+	    world.GetCosts(),
+	    max_turns
 	    );
 
     agents.push_back(std::move(a));

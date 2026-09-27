@@ -3,7 +3,8 @@
 
 
 World::World() 
-  : num_mines(0), num_mines_remaining(0)
+  : num_mines(0), num_mines_remaining(0),
+    num_treasures(0), num_treasures_remaining(0)
 {}
 
 
