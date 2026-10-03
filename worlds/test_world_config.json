@@ -9,7 +9,7 @@
 	"exploded_mine": "#",
 	"tele_symbols": ["(", ")"],
 	"tele_dests": [1, 0],
-	"agent_start": "@",
+	"agent_start": "K",
 	"treasure": "$",
 	"wall_color": [ 143, 67, 0 ],
 	"open_color": [ 128, 176, 255 ],

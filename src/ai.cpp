@@ -109,7 +109,11 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     }
 
     if (percepts.forward[0] == symbols.treasure) {
-      ExecuteCommands({FORWARD});
+      return ExecuteCommands({FORWARD});
+    }
+
+    if (percepts.forward[0] == symbols.disarmed_mine && !tried_disarming) {
+      tried_disarming = false;
     }
   }
   if (!percepts.backward.empty()) {
@@ -119,7 +123,7 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     }
 
     if (percepts.backward[0] == symbols.treasure) {
-      ExecuteCommands({BACKWARD});
+      return ExecuteCommands({BACKWARD});
     }
   }
 
@@ -136,13 +140,33 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     }
   }
 
+  std::vector<std::string> safe_symbols = {symbols.treasure, symbols.wall,
+                                           symbols.disarmed_mine};
+  for (auto i : symbols.teleporters) {
+    safe_symbols.push_back(i);
+  }
 
   if (percepts.detector == 1 && !tried_disarming) {
-    intention = DISARM;
-    tried_disarming = true;
+    if (percepts.forward[0] == symbols.wall ||
+        percepts.forward[0] == symbols.disarmed_mine) {
+      // intention = RIGHT;
+      return ExecuteCommands({RIGHT});
+    } else {
+      // intention = DISARM;
+      tried_disarming = true;
+      return ExecuteCommands({DISARM});
+    }
   } else if (percepts.detector == 1 && tried_disarming) {
-    intention = RIGHT;
+    // intention = RIGHT;
     tried_disarming = false;
+    return ExecuteCommands({RIGHT});
+  }
+
+  // i wonder how this will affect the agent - probably loops
+  if (intention == RIGHT && percepts.right[0] == symbols.wall) {
+    intention = LEFT;
+  } else if (intention == LEFT && percepts.left[0] == symbols.wall) {
+    intention = RIGHT;
   }
 
   // EXECUTE COMMAND
