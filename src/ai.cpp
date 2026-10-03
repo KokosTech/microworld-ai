@@ -82,8 +82,19 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     return ExecuteCommands({TREASURE});
   }
 
-  // command you intend to execute
-  std::string intention = FORWARD;
+  // command you intend to execute - add some randomness for fun testing
+  std::uniform_int_distribution<> distr(0, 10);
+  std::string intention;
+  int num = distr(*rng);
+  if (num < 8) {
+    intention = FORWARD;
+  } else if (num == 8) {
+    intention = RIGHT;
+  } else if (num == 9) {
+    intention = LEFT;
+  } else {
+    intention = BACKWARD;
+  }
   // std::string seen_treasure_direction;
 
   if (!percepts.forward.empty()) {
@@ -99,10 +110,6 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
 
     if (percepts.forward[0] == symbols.treasure) {
       ExecuteCommands({FORWARD});
-    }
-
-    if (percepts.forward[0] == symbols.disarmed_mine) {
-      tried_disarming = false;
     }
   }
   if (!percepts.backward.empty()) {

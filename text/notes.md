@@ -27,3 +27,10 @@ Ideas and short notes while coding:
 - working on a reactive agent right now will be moved to a model / utility agent later
 - just like the more complex models in class, we should be able to evaluate intentions (commands to be executed) – right
   now I am working with only a single one, but it would be a changed to a map with commands and their evaluation
+- it is funny to look at this primitive agent and how it works for the default map, but for my custom - not, because of
+  a simple reason by default if no trap or treasure is in sight - it moves forward an it gets stuck
+- it should have a desire to disarm traps; and obv highest one - eat treasures
+- it feels like im trying to teach a baby how to do calc
+- you can quite easly see why reactive agents (even for vacuum cleaners) wouldnt work well at all - as they just spin
+  around and get stuck (unless you introduce pseudo randomness) - altough before continuing with a model agent, i know
+  that i can make a better reactive one => i will persue it in the coming hours and maybe max 2 days before moving on
