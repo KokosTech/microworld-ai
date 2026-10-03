@@ -47,7 +47,7 @@ void AI::PrintPercepts(const Percepts& percepts) {
   }
 }
 
-std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds) {
+std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds, Percepts& percepts) {
   std::cout << "CMDS:      ";
 
   for (std::vector<std::string>::const_iterator it = cmds.begin();
@@ -57,6 +57,7 @@ std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds) {
   std::cout << std::endl;
 
   ++this->clock;
+  this->prev_distance = percepts.detector;
   return {cmds};
 }
 
@@ -68,18 +69,21 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   PrintPercepts(percepts);
 
   // LOGIC
+  if (percepts.forward[0] == symbols.disarmed_mine && tried_disarming) {
+    tried_disarming = false;
+  }
 
   // STATE 0 - initial mapping (turning around 270) - will be used when mapping
   // (rn not)
   if (clock < 3) {
     // add additional checks if they are known walls
-    return ExecuteCommands({RIGHT});
+    return ExecuteCommands({RIGHT}, percepts);
   }
 
   // get treasure
   if (std::find(percepts.current.begin(), percepts.current.end(),
                 symbols.treasure) != percepts.current.end()) {
-    return ExecuteCommands({TREASURE});
+    return ExecuteCommands({TREASURE}, percepts);
   }
 
   // command you intend to execute - add some randomness for fun testing
@@ -109,11 +113,7 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     }
 
     if (percepts.forward[0] == symbols.treasure) {
-      return ExecuteCommands({FORWARD});
-    }
-
-    if (percepts.forward[0] == symbols.disarmed_mine && !tried_disarming) {
-      tried_disarming = false;
+      return ExecuteCommands({FORWARD}, percepts);
     }
   }
   if (!percepts.backward.empty()) {
@@ -123,7 +123,7 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     }
 
     if (percepts.backward[0] == symbols.treasure) {
-      return ExecuteCommands({BACKWARD});
+      return ExecuteCommands({BACKWARD}, percepts);
     }
   }
 
@@ -150,16 +150,16 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
     if (percepts.forward[0] == symbols.wall ||
         percepts.forward[0] == symbols.disarmed_mine) {
       // intention = RIGHT;
-      return ExecuteCommands({RIGHT});
+      return ExecuteCommands({RIGHT}, percepts);
     } else {
       // intention = DISARM;
       tried_disarming = true;
-      return ExecuteCommands({DISARM});
+      return ExecuteCommands({DISARM}, percepts);
     }
   } else if (percepts.detector == 1 && tried_disarming) {
     // intention = RIGHT;
     tried_disarming = false;
-    return ExecuteCommands({RIGHT});
+    return ExecuteCommands({RIGHT}, percepts);
   }
 
   // i wonder how this will affect the agent - probably loops
@@ -170,5 +170,5 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   }
 
   // EXECUTE COMMAND
-  return ExecuteCommands({intention});
+  return ExecuteCommands({intention}, percepts);
 }

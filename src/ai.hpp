@@ -33,12 +33,13 @@ class AI {
   // additional data
   unsigned clock;
   bool tried_disarming = false;
+  int prev_distance = -1;
 
   // data structure for map
 
   // helper methods
 
-  std::vector<std::string> ExecuteCommands(std::vector<std::string> cmds);
+  std::vector<std::string> ExecuteCommands(std::vector<std::string> cmds, Percepts& percepts);
 
  public:
   AI();
