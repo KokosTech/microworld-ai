@@ -34,6 +34,7 @@ class AI {
   unsigned clock;
   bool tried_disarming = false;
   int prev_distance = -1;
+  std::string prev_cmd;
 
   // data structure for map
 

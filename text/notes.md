@@ -35,3 +35,4 @@ Ideas and short notes while coding:
 - you can quite easly see why reactive agents (even for vacuum cleaners) wouldnt work well at all - as they just spin
   around and get stuck (unless you introduce pseudo randomness) - altough before continuing with a model agent, i know
   that i can make a better reactive one => i will persue it in the coming hours and maybe max 2 days before moving on
+- if the desire for traps is really high, it gets stuck in the walls, so i should find a soluton 

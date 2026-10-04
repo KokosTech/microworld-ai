@@ -58,6 +58,7 @@ std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds, Perc
 
   ++this->clock;
   this->prev_distance = percepts.detector;
+  this->prev_cmd = cmds[-1];
   return {cmds};
 }
 
@@ -99,6 +100,15 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   } else {
     intention = BACKWARD;
   }
+
+  // if (prev_distance > percepts.detector) {
+  //   intention = prev_cmd;
+  // } else if (prev_distance < percepts.detector) {
+  //   intention = BACKWARD;
+  // } else if (prev_distance == percepts.detector && (prev_cmd == FORWARD || prev_cmd == BACKWARD)) {
+  //   intention = num % 2 ? RIGHT : LEFT;
+  // }
+
   // std::string seen_treasure_direction;
 
   if (!percepts.forward.empty()) {
