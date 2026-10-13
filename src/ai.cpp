@@ -15,9 +15,36 @@ AI::AI(unsigned id, unsigned agent_speed, std::mt19937_64* rng, Symbols symbols,
       symbols(symbols),
       costs(costs),
       max_turn(max_turn),
-      clock(0) {}
+      clock(0),
+      rotation(0),
+      agent_position({DEFAULT_MAP_SIZE / 2, DEFAULT_MAP_SIZE / 2}),
+      agent_map(DEFAULT_MAP_SIZE,
+                std::vector<std::string>(DEFAULT_MAP_SIZE, UNEXPLORED_SYMBOL)) {
+}
+
+void AI::PrintMap() {
+  for (auto row : agent_map) {
+    for (auto cell : row) {
+      if (cell == UNEXPLORED_SYMBOL) {
+        std::cout << cell << " ";
+      } else if (cell == SAFE_SYMBOL) {
+        std::cout << "\033[1;42m" << cell << "\033[0m ";
+      } else {
+        std::cout << "\033[1;41m" << cell << "\033[0m ";
+      }
+    }
+    std::cout << std::endl;
+  }
+}
 
 void AI::PrintPercepts(const Percepts& percepts) {
+  std::cout << "------------------ MAP ----------------------\n";
+  PrintMap();
+  std::cout << "---------------------------------------------\n";
+  std::cout << "AGENT ID: " << id << std::endl;
+  std::cout << "AGENT POS: " << agent_position.x << "," << agent_position.y
+            << std::endl;
+  std::cout << "AGENT ROT: " << rotation << std::endl;
   std::cout << "DISTANCE: " << percepts.detector << std::endl;
   std::cout << "CURRENT:  " << percepts.current[0] << std::endl;
   std::cout << "FORWARD:  ";
@@ -47,7 +74,59 @@ void AI::PrintPercepts(const Percepts& percepts) {
   }
 }
 
-std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds, Percepts& percepts) {
+void AI::AddToMap(Coordinates cor, Percepts& percepts) {
+  auto in_bounds = [](int x, int y) {
+    return x >= 0 && y >= 0 && x < DEFAULT_MAP_SIZE && y < DEFAULT_MAP_SIZE;
+  };
+  auto convert = [&](const std::string& s) {
+    return s == symbols.open ? SAFE_SYMBOL : s;
+  };
+
+  // current cell
+  if (in_bounds(cor.x, cor.y) && !percepts.current.empty()) {
+    agent_map[cor.y][cor.x] = convert(percepts.current[0]);
+  }
+
+  // forward vector for rotation: 0 up, 1 right, 2 down, -1 left
+  int dx = 0, dy = 0;
+  switch (rotation) {
+    case 0:
+      dx = 0;
+      dy = -1;
+      break;
+    case 1:
+      dx = 1;
+      dy = 0;
+      break;
+    case 2:
+      dx = 0;
+      dy = 1;
+      break;
+    case -1:
+      dx = -1;
+      dy = 0;
+      break;
+    default:
+      return;  // invalid rotation, don't corrupt the map
+  }
+
+  auto scan = [&](int sx, int sy, const std::vector<std::string>& seen) {
+    for (size_t i = 0; i < seen.size(); ++i) {
+      int x = cor.x + sx * (int)(i + 1);
+      int y = cor.y + sy * (int)(i + 1);
+      if (!in_bounds(x, y)) break;
+      agent_map[y][x] = convert(seen[i]);
+    }
+  };
+
+  scan(dx, dy, percepts.forward);
+  scan(-dx, -dy, percepts.backward);
+  scan(dy, -dx, percepts.left);   // left of (dx,dy)
+  scan(-dy, dx, percepts.right);  // right of (dx,dy)
+}
+
+std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds,
+                                             Percepts& percepts) {
   std::cout << "CMDS:      ";
 
   for (std::vector<std::string>::const_iterator it = cmds.begin();
@@ -57,9 +136,65 @@ std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds, Perc
   std::cout << std::endl;
 
   ++this->clock;
-  this->prev_distance = percepts.detector;
-  this->prev_cmd = cmds[-1];
-  return {cmds};
+  for (const auto& cmd : cmds) {
+    if (cmd == RIGHT) {
+      rotation = (rotation + 1) % 4;
+
+      if (rotation == 3) rotation = -1;
+
+    }
+
+    else if (cmd == LEFT) {
+      rotation = (rotation + 3) % 4;
+
+      if (rotation == 2) rotation = 2;
+
+    }
+
+    else if (cmd == FORWARD) {
+      switch (rotation) {
+        case 0:
+          agent_position.y--;
+          break;
+
+        case 1:
+          agent_position.x++;
+          break;
+
+        case -1:
+          agent_position.x--;
+          break;
+
+        case 2:
+          agent_position.y++;
+          break;
+      }
+
+    }
+
+    else if (cmd == BACKWARD) {
+      switch (rotation) {
+        case 0:
+          agent_position.y++;
+          break;
+
+        case 1:
+          agent_position.x--;
+          break;
+
+        case -1:
+          agent_position.x++;
+          break;
+
+        case 2:
+          agent_position.y--;
+          break;
+      }
+    }
+  }
+  // this->prev_distance = percepts.detector;
+  // this->prev_cmd = cmds[-1];
+  return cmds;
 }
 
 std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
@@ -68,6 +203,9 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   std::cout << "------------------------------------------------\n";
   std::cout << "AGENT ID: " << id << std::endl;
   PrintPercepts(percepts);
+
+  // init map from beginning / middle
+  AddToMap(agent_position, percepts);
 
   // LOGIC
   if (percepts.forward[0] == symbols.disarmed_mine && tried_disarming) {
@@ -105,7 +243,8 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   //   intention = prev_cmd;
   // } else if (prev_distance < percepts.detector) {
   //   intention = BACKWARD;
-  // } else if (prev_distance == percepts.detector && (prev_cmd == FORWARD || prev_cmd == BACKWARD)) {
+  // } else if (prev_distance == percepts.detector && (prev_cmd == FORWARD ||
+  // prev_cmd == BACKWARD)) {
   //   intention = num % 2 ? RIGHT : LEFT;
   // }
 
