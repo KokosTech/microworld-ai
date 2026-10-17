@@ -19,6 +19,7 @@
 #define USE "U"
 #define TREASURE "T"
 #define DISARM "D"
+#define UNREACHABLE_SYMBOL "X"
 
 // struct ExtendedSymbols: public Symbols {
 //
@@ -47,6 +48,11 @@ class AI {
   // ExtendedSymbols extended_symbols;
   Costs costs;
   int max_turn;
+
+
+  // 0 = up, 1 = right, 2 = down, 3 = left (clockwise)
+  const int DX[4] = {0, 1, 0, -1};
+  const int DY[4] = {-1, 0, 1, 0};
 
   // additional data
   unsigned num_turns;
