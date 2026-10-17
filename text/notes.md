@@ -57,8 +57,8 @@ grid". It should start in the center and do its thing afterwards. That's why a 1
 more memory intensive, but it saves quite much on performance and potential array enlargements - useless copying and
 computation.
 
-There should be an "algorithm" to detect the end of the map / map size. I don't know how necessary it would be - as it could
-just remain as "unexplored" instead of unreachable.
+There should be an "algorithm" to detect the end of the map / map size. I don't know how necessary it would be - as it
+could just remain as "unexplored" instead of unreachable.
 
 Map collisions with teleporting are to be examined in the hopefully near future. That would requre some sorts of a
 complex matching algorithm for the arrays. todo - read articles on that topic – preferably simple (both complexity and
@@ -72,23 +72,70 @@ executed. So, what could I do with that?
 {handwritten notes to be inserted here 2.5 pages of agony}
 
 Work on Encode // Decode Communications has started. Here follow the "coding" notes:
-- Bla
 
+- Bla
 
 # October 9th
 
-What about a set of new actions - instead of just thinking each round; think of a *useful* way to “think” a few actions ahead and evaluate them before running 
+What about a set of new actions - instead of just thinking each round; think of a *useful* way to “think” a few actions
+ahead and evaluate them before running
 
-Informed search - for traps 
+Informed search - for traps
 
-Uninformed - for exploring the map 
+Uninformed - for exploring the map
 
 How do I balance it off??
 
 Also try to guess the trap itself, instead of just rotating
 
-Also add "potential trap" string 
+Also add "potential trap" string
 
-# October 10th
+# October 10th - 15th (writing project + preparing for quiz 2)
 
-# October 11th
+What about a set of new actions - instead of just thinking each round; think of a *useful* way to “think” a few actions
+ahead and evaluate them before running Informed search - for traps Uninformed - for exploring the map How do I balance
+it off?? Also try to guess the trap itself, instead of just rotating
+
+What about a cost function, we should somehow take into account the costs provided to the agent- maybe for traversing
+
+If time I could do a graph, I dont think its necessary tho; although it may be useful to know taken path - maybe a
+separate data structure?
+
+I think some sort of DFS would be could - until you run to a wall, but with higher priority - traps ;;; no BFS with
+greedy frontier If very limited turns - hunt for traps, think of exploration - later Cost analysis at least for - dont
+go back to nodes already explored unless you want to use them to reach unexplored land beyond them - either see it, or
+haven’t amped Do not make loops best case, but if you have to go back - go It is gonna keep track of historic
+movements - if it gets stuck and has to go back
+
+NOTE for comm implementation -> we dont know the direction of the bots - could be different, before we use the info,
+they should go forward, then backwards, and look to the left- it’s gonna know even in П shaped; TS gonna be a bit
+complicated - at least an hour or 2
+
+Iterative Deepening? No
+
+Disarm all traps -> bad idea cuz your area might be cleared of traps and you’ll have to teleport
+
+Goal - expanding frontier, disarming nearby traps (under 5 Manhattan?), but if treasuer is seen - highest priority to
+it, unless trap distance = 1 It should be an algorithm Searching ALWAYS HAPPENS WITH THE MAP, not the percepts -
+percepts ONLY feed the map => operations Even if T is seen, first look up the map - are the fields to it save, or do we
+have to look for traps.
+
+NOTE -> tie the teleported - map which one to which
+
+An online algorithm, on the other hand, can discover successors only for a state that it physically occupies. To avoid
+traveling all the way to a distant state to expand the next node, it seems better to expand nodes in a local order.
+Depth-first search has exactly this property because (except when the algorithm is backtracking) the next node expanded
+is a child of the previous node expanded.
+
+Importance Todo
+
+- Traversing and Map Handling
+- Handling Teleport (multiple maps, and collision)
+- Handling Communication
+
+Next thing to do - handling comm, as I want richer map
+
+FIX ->>>>>>> ROTATION SHOULD BE COMMUNICATED !!!! Maybe R F F F R R L L
+
+# October 17th
+
