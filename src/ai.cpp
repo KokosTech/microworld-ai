@@ -761,7 +761,7 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   // todo
 
   // read what the other rogues sent
-  // ReadPeers(percepts, comms);
+  ReadPeers(percepts, comms);
   PrintPercepts(percepts);
 
   // decision
