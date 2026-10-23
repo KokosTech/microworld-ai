@@ -34,7 +34,9 @@ AI::AI(unsigned id, unsigned agent_speed, std::mt19937_64* rng, Symbols symbols,
       has_target(false),
       explore_target({0, 0}) {}
 
-// MAPPING METHODS
+// =================================================
+// === MAPPING METHODS
+// =================================================
 
 void AI::PrintPercepts(const Percepts& percepts) {
   std::cout
@@ -82,6 +84,7 @@ void AI::PrintPercepts(const Percepts& percepts) {
 template <typename T>
 void AI::PrintMap(const std::vector<std::vector<T>>& map) {
   const char* arrows[4] = {"^", ">", "v", "<"};
+
   for (int y = 0; y < DEFAULT_MAP_SIZE; ++y) {
     for (int x = 0; x < DEFAULT_MAP_SIZE; ++x) {
       const T& cell = map[y][x];
@@ -192,17 +195,340 @@ std::vector<std::string> AI::ExecuteCommands(std::vector<std::string> cmds,
   return cmds;
 }
 
-// PATH FINDING
+// =================================================
+// === TRAVERSING HELPERS + TRAP HANDLING
+// =================================================
 
-//...
+bool AI::IsTeleporter(const std::string& s) {
+  for (size_t i = 0; i < symbols.teleporters.size(); ++i) {
+    if (symbols.teleporters[i] == s) return true;
+  }
+  return false;
+}
+
+bool AI::IsSafe(int x, int y) {
+  const std::string& cell = agent_map[y][x];
+
+  if (cell == UNEXPLORED_SYMBOL || cell == UNREACHABLE_SYMBOL ||
+      cell == symbols.wall)
+    return false;
+
+  if (cell == SAFE_SYMBOL || cell == symbols.treasure ||
+      cell == symbols.disarmed_mine || cell == symbols.exploded_mine ||
+      IsTeleporter(cell)) {
+    return true;
+  }
+
+  return no_traps_left || agent_safe[y][x] == 1;
+}
+
+// the frontier is basically the safe cells that have unknown relatives
+bool AI::IsFrontier(int x, int y) {
+  if (!IsSafe(x, y)) return false;
+
+  for (int d = 0; d < 4; ++d) {
+    int nx = x + DX[d];
+    int ny = y + DY[d];
+    if (!IsInBounds(nx, ny)) continue;
+    const std::string& cell = agent_map[ny][nx];
+    if (cell == symbols.wall || cell == UNREACHABLE_SYMBOL) continue;
+    if (cell == UNEXPLORED_SYMBOL || !IsSafe(nx, ny)) return true;
+  }
+
+  return false;
+}
+
+// auto safe if we're on it
+// if d < 0 -> no need to waste power
+// anything with lower manhatan distance than d is safe
+void AI::MarkSafe(const Percepts& percepts) {
+  agent_safe[agent_position.y][agent_position.x] = 1;  // we are alive here
+
+  if (percepts.detector < 0) {
+    no_traps_left = true;
+    return;
+  }
+
+  int r = percepts.detector - 1;
+
+  for (int dy = -r; dy <= r; ++dy) {
+    for (int dx = -r; dx <= r; ++dx) {
+      if (std::abs(dx) + std::abs(dy) > r) continue;
+      int x = agent_position.x + dx;
+      int y = agent_position.y + dy;
+      if (IsInBounds(x, y)) agent_safe[y][x] = 1;
+    }
+  }
+}
+
+// only when d is 1 - try to disarm only non-safe cells (save on costs)
+// my initial logic was to do all 4 bcz it doesnt cost that much
+// then i realized that we do not have a lot of turns in the game
+bool AI::ProbeNeighbors(std::string& cmd) {
+  int best_dir = -1;
+  int best_turns = 10;
+
+  for (int d = 0; d < 4; d++) {
+    int x = agent_position.x + DX[d];
+    int y = agent_position.y + DY[d];
+
+    if (!IsInBounds(x, y)) continue;
+
+    const std::string& cell = agent_map[y][x];
+
+    if (cell == symbols.wall || cell == UNEXPLORED_SYMBOL ||
+        cell == UNREACHABLE_SYMBOL)
+      continue;
+    if (IsSafe(x, y)) continue;
+
+    int turn = (d - rotation + 4) % 4;
+    int turns = turn;
+
+    if (turn == 3) turns = 1;
+    if (turns < best_turns) {
+      best_turns = turns;
+      best_dir = d;
+    }
+  }
+  if (best_dir == -1) return false;
+
+  int turn = (best_dir - rotation + 4) % 4;
+  if (turn == 0) {
+    probing = true;
+    probe_cell.x = agent_position.x + DX[best_dir];
+    probe_cell.y = agent_position.y + DY[best_dir];
+    cmd = DISARM;
+  } else if (turn == 3) {
+    cmd = LEFT;
+  } else {
+    cmd = RIGHT;
+  }
+  return true;
+}
+
+// look around UNKNOWN cells next to the agent
+bool AI::LookBehind(std::string& cmd) {
+  for (int turn = 1; turn < 4; turn++) {
+    int d = (rotation + turn) % 4;
+    int x = agent_position.x + DX[d];
+    int y = agent_position.y + DY[d];
+
+    if (!IsInBounds(x, y) || agent_map[y][x] != UNEXPLORED_SYMBOL) continue;
+
+    looking = true;
+    look_cell.x = x;
+    look_cell.y = y;
+
+    if (turn == 3) {
+      cmd = LEFT;
+    } else {
+      cmd = RIGHT;
+    }
+
+    return true;
+  }
+  return false;
+}
 
 // =================================================
-// === ENTRY POINT FOR AI
+// === PATHFINDING SHI
 // =================================================
+
+// basically get a map of "weights" and directions from cur pos
+// some online forums call it a flooding algorithm
+// ONLY SAFE CELLS
+void AI::Bfs() {
+  bfs_dist.assign(DEFAULT_MAP_SIZE, std::vector<int>(DEFAULT_MAP_SIZE, -1));
+  bfs_dir.assign(DEFAULT_MAP_SIZE, std::vector<int>(DEFAULT_MAP_SIZE, -1));
+
+  std::queue<Coordinates> q;
+  q.push(agent_position);
+  bfs_dist[agent_position.y][agent_position.x] = 0;
+
+  while (!q.empty()) {
+    Coordinates cur = q.front();
+    q.pop();
+
+    for (int d = 0; d < 4; ++d) {
+      int nx = cur.x + DX[d];
+      int ny = cur.y + DY[d];
+
+      if (!IsInBounds(nx, ny) || bfs_dist[ny][nx] != -1 || !IsSafe(nx, ny))
+        continue;
+
+      bfs_dist[ny][nx] = bfs_dist[cur.y][cur.x] + 1;
+      bfs_dir[ny][nx] = d;
+      Coordinates next = {nx, ny};
+
+      q.push(next);
+    }
+  }
+}
+
+// universal target
+std::string AI::FirstStepTo(Coordinates target) {
+  int x = target.x;
+  int y = target.y;
+  int d = bfs_dir[y][x];
+
+  // basically backtracking
+  while (bfs_dist[y][x] > 1) {
+    x -= DX[d];
+    y -= DY[d];
+    d = bfs_dir[y][x];
+  }
+
+  int turn = (d - rotation + 4) % 4;
+
+  if (turn == 0) return FORWARD;
+  if (turn == 1) return RIGHT;
+  if (turn == 3) return LEFT;
+
+  return BACKWARD;
+}
+
+// eat the closest treasurr
+bool AI::FindNearestTreasure(Coordinates& target) {
+  int best = -1;
+
+  for (int y = 0; y < DEFAULT_MAP_SIZE; ++y) {
+    for (int x = 0; x < DEFAULT_MAP_SIZE; ++x) {
+      if (agent_map[y][x] != symbols.treasure || bfs_dist[y][x] <= 0) continue;
+      if (best == -1 || bfs_dist[y][x] < best) {
+        best = bfs_dist[y][x];
+        target.x = x;
+        target.y = y;
+      }
+    }
+  }
+
+  return best != -1;
+}
+
+// nearest frontier (i think i read about it in the book)
+// it also said tiebreaking is important
+// in this case -> rng is used
+bool AI::FindNearestFrontier(Coordinates& target) {
+  int best = -1;
+  int ties = 0;
+
+  for (int y = 0; y < DEFAULT_MAP_SIZE; ++y) {
+    for (int x = 0; x < DEFAULT_MAP_SIZE; ++x) {
+      if (bfs_dist[y][x] <= 0 || !IsFrontier(x, y)) continue;
+      if (best == -1 || bfs_dist[y][x] < best) {
+        best = bfs_dist[y][x];
+        ties = 1;
+        target.x = x;
+        target.y = y;
+      } else if (bfs_dist[y][x] == best) {
+        ++ties;
+        if ((*rng)() % ties == 0) {
+          target.x = x;
+          target.y = y;
+        }
+      }
+    }
+  }
+
+  return best != -1;
+}
+
+// not always the closest - prefers unused (or least used)
+// it's kinda like the weighed algos in class but on much simpler scale
+// you could say the agent is goal based in this sense
+bool AI::FindNearestTeleporter(Coordinates& target) {
+  int best = -1;
+
+  for (int y = 0; y < DEFAULT_MAP_SIZE; ++y) {
+    for (int x = 0; x < DEFAULT_MAP_SIZE; ++x) {
+      const std::string& cell = agent_map[y][x];
+
+      if (!IsTeleporter(cell) || bfs_dist[y][x] < 0) continue;
+      if (TimesUsed(cell) >= MAX_TELEPORTER_USES) continue;
+
+      int score = bfs_dist[y][x] + 100 * TimesUsed(cell);
+
+      if (best == -1 || score < best) {
+        best = score;
+        target.x = x;
+        target.y = y;
+      }
+    }
+  }
+
+  return best != -1;
+}
+
+// =================================================
+// === JUST AI RUN AND DECISION THINGY
+// =================================================
+
+// basically this is the main framework of our next command
+// i have based it on my own logic (haven't researched anything, just felt like
+// it was more of a common sense - after all we have to make it "human-like')
+std::vector<std::string> AI::Decide(Percepts& percepts) {
+  // upgraded logic of the trap disarmament
+  // tried to, there was no trap - so now we know that cell is safe.
+  if (probing) {
+    probing = false;
+    if (agent_map[probe_cell.y][probe_cell.x] != symbols.disarmed_mine) {
+      agent_safe[probe_cell.y][probe_cell.x] = 1;
+    }
+  }
+
+  // 1. standing on treasure: take it
+  if (!percepts.current.empty() && percepts.current[0] == symbols.treasure) {
+    return ExecuteCommands({TREASURE}, percepts);
+  }
+
+  // after here pathfinding is utilized
+
+  Bfs();  // the best helper init function ever - the filler
+  Coordinates target;
+  std::string cmd;
+
+  // 2. a treasure we can reach over safe cells
+  if (FindNearestTreasure(target))
+    return ExecuteCommands({FirstStepTo(target)}, percepts);
+
+  // 3. a trap right next to us: look around, then disarm the suspects
+  if (percepts.detector == 1) {
+    if (LookBehind(cmd)) return ExecuteCommands({cmd}, percepts);
+    if (ProbeNeighbors(cmd)) return ExecuteCommands({cmd}, percepts);
+  }
+
+  // 4. look at unknown cells next to us
+  if (LookBehind(cmd)) return ExecuteCommands({cmd}, percepts);
+
+  // 5. explore: keep walking to the same frontier while it is still a frontier
+  if (has_target && bfs_dist[explore_target.y][explore_target.x] > 0 &&
+      IsFrontier(explore_target.x, explore_target.y)) {
+    return ExecuteCommands({FirstStepTo(explore_target)}, percepts);
+  }
+  has_target = false;
+  if (FindNearestFrontier(target)) {
+    has_target = true;
+    explore_target = target;
+    return ExecuteCommands({FirstStepTo(target)}, percepts);
+  }
+
+  // 6. nothing left in this section: use a teleporter - no more nearby traps,
+  // no more frontier; it's escaping time!
+  if (FindNearestTeleporter(target)) {
+    if (target.x == agent_position.x && target.y == agent_position.y) {
+      return ExecuteCommands({USE}, percepts);
+    }
+    return ExecuteCommands({FirstStepTo(target)}, percepts);
+  }
+
+  // i dont know what to do here, dont even know if it's possible to reach it
+  // ofc if a $ is in an unreachable area, but z said - that aint happening
+  return {};
+}
 
 std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   // handle teleport landing (aka new map)
-  HandleLanding(percepts);
+  // todo HandleLanding(percepts);
 
   // add percepts to map
   AddToMap(agent_position, percepts);
@@ -215,7 +541,7 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
 
   // read what the other rogues sent
   // ReadPeers(percepts, comms);
-  // PrintPercepts(percepts);
+  PrintPercepts(percepts);
 
   // decision
   // int old_rotation = rotation;  // the heading our percepts were taken from

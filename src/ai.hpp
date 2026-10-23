@@ -11,6 +11,8 @@
 - doesnt dynamically use costs - it's based on assumptions that may not be true
 ============================ */
 // formatting used - google clang in clion
+// comments are for purely report-reason - aka theyll help me what to write on
+// the report, sometimes they may not really be connected to the code next to
 
 #pragma once
 
