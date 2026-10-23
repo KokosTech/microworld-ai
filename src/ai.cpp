@@ -500,7 +500,185 @@ void AI::PostTeleport(const Percepts& percepts) {
 // my brightest moment from the project in the panitza library
 // =================================================
 
-// ...
+Coordinates Rotate(Coordinates v, int k) {
+  for (int i = 0; i < k; i++) {
+    int old_x = v.x;
+    v.x = -v.y;
+    v.y = old_x;
+  }
+  return v;
+}
+
+// nibble -
+// https://www.geeksforgeeks.org/computer-organization-architecture/what-is-a-nibble/
+unsigned GetNibble(uint32_t word, int n) { return (word >> (4 * n)) & 15; }
+
+unsigned AI::Encode(const std::string& s) {
+  if (s == symbols.wall) return CODE_WALL;
+  if (s == symbols.open) return CODE_OPEN;
+  if (s == symbols.treasure) return CODE_TREASURE;
+  if (s == symbols.disarmed_mine) return CODE_DISARMED;
+  if (s == symbols.exploded_mine) return CODE_EXPLODED;
+  for (size_t i = 0; i < symbols.teleporters.size() && i < 6; i++) {
+    if (s == symbols.teleporters[i]) return CODE_TELEPORTER + (unsigned)i;
+  }
+  return CODE_UNKNOWN;
+}
+
+std::string AI::Decode(unsigned n) {
+  if (n == CODE_WALL) return symbols.wall;
+  if (n == CODE_OPEN) return symbols.open;
+  if (n == CODE_TREASURE) return symbols.treasure;
+  if (n == CODE_DISARMED) return symbols.disarmed_mine;
+  if (n == CODE_EXPLODED) return symbols.exploded_mine;
+  if (n >= CODE_TELEPORTER &&
+      n - CODE_TELEPORTER < symbols.teleporters.size()) {
+    return symbols.teleporters[n - CODE_TELEPORTER];
+  }
+
+  return UNEXPLORED_SYMBOL;
+}
+
+unsigned AI::Nib(const std::vector<std::string>& cells, size_t i) {
+  if (i < cells.size()) return Encode(cells[i]);
+  return CODE_UNKNOWN;
+}
+
+// https://www.geeksforgeeks.org/cpp/left-shift-right-shift-operators-c-cpp/
+uint32_t AI::PackCells(const std::vector<std::string>& cells, int pos,
+                       int count) {
+  uint32_t word = 0;
+  for (int i = 0; i < count; ++i) word |= Nib(cells, i) << (4 * (pos - i));
+  return word;
+}
+
+void AI::UnpackCells(Coordinates start, int dir, uint32_t word,
+                     int first_nibble, int count) {
+  for (int i = 0; i < count; i++) {
+    unsigned code = GetNibble(word, first_nibble - i);
+    int x = start.x + DX[dir] * (i + 1);
+    int y = start.y + DY[dir] * (i + 1);
+
+    if (code == CODE_UNKNOWN || !IsInBounds(x, y)) continue;
+
+    std::string& cell = agent_map[y][x];
+    // only fill cells we do not know, or remove a treasure
+    if (cell == UNEXPLORED_SYMBOL ||
+        (cell == symbols.treasure && code == CODE_OPEN)) {
+      cell = Decode(code);
+    }
+  }
+}
+
+// where another agent is on our map
+Coordinates AI::CalcOtherPosition(const Percepts& percepts, size_t j) {
+  int forward = rotation;
+  int right = (rotation + 1) % 4;
+  int vx = percepts.others[j].x;
+  int vy = percepts.others[j].y;
+
+  Coordinates pos;
+
+  pos.x = agent_position.x + vx * DX[right] + vy * DX[forward];
+  pos.y = agent_position.y + vx * DY[right] + vy * DY[forward];
+
+  return pos;
+}
+
+// share map with the rest
+void AI::Publish(const Percepts& percepts, AgentComm* comms, int old_rotation,
+                 const std::vector<std::string>& cmds) {
+  unsigned move = 0;
+
+  if (!cmds.empty()) {
+    if (cmds[0] == FORWARD) move = 1;
+    if (cmds[0] == BACKWARD) move = 2;
+    if (cmds[0] == USE && pending_teleport) move = 3;
+  }
+
+  // [DR] F F F L L R R - described in the report
+  uint32_t word = ((move << 2) | (unsigned)old_rotation) << 28;
+
+  word |= PackCells(percepts.forward, 6, 3);
+  word |= PackCells(percepts.left, 3, 2);
+  word |= PackCells(percepts.right, 1, 2);
+
+  comms->SetSignal(id, word);
+}
+
+// now this is the hard part - reading
+void AI::ReadPeers(const Percepts& percepts, AgentComm* comms) {
+  if (peers.size() != percepts.others.size())
+    peers.resize(percepts.others.size());
+
+  for (size_t j = 0; j < percepts.others.size(); j++) {
+    if (j == id) continue;
+
+    Coordinates now = CalcOtherPosition(percepts, j);
+
+    // a rogue stands there, so no trap
+    // you could also say that the rogue is dead, but i dont think my logic
+    // allows death -> i assume it is not dead
+    if (IsInBounds(now.x, now.y)) agent_safe[now.y][now.x] = 1;
+
+    // if (j >= comms->GetNumAgents()) continue;
+
+    uint32_t word = comms->GetSignal((int)j);
+    int their_rotation = GetNibble(word, 7) & 3;
+    unsigned their_move = GetNibble(word, 7) >> 2;
+    LearnRotation(peers[j], their_rotation, their_move, now);
+
+    peers[j].prev = now;
+    peers[j].has_prev = true;
+
+    // todo make #define for the moves it's kinda confusing with just 3 etc
+    // we can only use their cells once we know how their map is turned
+    if (peers[j].k == -1 || their_move == 3) continue;
+
+    // here we consume the info from them
+
+    // convert rotation from last turn to now
+    // save new location and use rotation
+    int heading = (their_rotation + peers[j].k) % 4;
+    Coordinates start = now;
+    if (their_move == 1) {
+      start.x -= DX[heading];
+      start.y -= DY[heading];
+    } else if (their_move == 2) {
+      start.x += DX[heading];
+      start.y += DY[heading];
+    }
+
+    // finally learn the cells from the others
+    UnpackCells(start, heading, word, 6, 3);            // forward
+    UnpackCells(start, (heading + 3) % 4, word, 3, 2);  // left
+    UnpackCells(start, (heading + 1) % 4, word, 1, 2);  // right
+  }
+}
+
+// and now the hardest - i call it the dance between the rogues
+// syncing their rotations - lots of trials and errors
+// and edgecases i havent thought of
+// firstly i thougth of rotation - turns out it wasnt possible
+// but moving backwards and forwards - it was possible to sync the rotations
+// i was scared of breaking due to walls - BUT I precoded it not to run into
+void AI::LearnRotation(PeerInfo& peer, int their_rotation, unsigned their_move,
+                       Coordinates now) {
+  if (!peer.has_prev) return;
+  if (their_move != 1 && their_move != 2) return;
+
+  int their_dir = their_rotation;
+  if (their_move == 2) their_dir = (their_rotation + 2) % 4;
+
+  Coordinates their_step = {DX[their_dir], DY[their_dir]};
+  Coordinates seen_step = {now.x - peer.prev.x, now.y - peer.prev.y};
+
+  for (int k = 0; k < 4; k++) {
+    Coordinates turned = Rotate(their_step, k);
+    // set k to known rotation
+    if (turned.x == seen_step.x && turned.y == seen_step.y) peer.k = k;
+  }
+}
 
 // =================================================
 // === JUST AI RUN AND DECISION THINGY
@@ -587,10 +765,10 @@ std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
   PrintPercepts(percepts);
 
   // decision
-  // int old_rotation = rotation;  // the heading our percepts were taken from
+  int old_rotation = rotation;  // the heading our percepts were taken from
   std::vector<std::string> cmds = Decide(percepts);
 
   // publish comm (send to other rogues)
-  // Publish(percepts, comms, old_rotation, cmds);
+  Publish(percepts, comms, old_rotation, cmds);
   return cmds;
 }

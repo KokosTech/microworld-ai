@@ -64,7 +64,7 @@ const int MAX_TELEPORTER_USES = 3;
 // === GLOBAL CONST FOR COMM - this is my baby
 // =================================================
 
-// [RD] F F F L L R R - described in the report
+// [DR] F F F L L R R - described in the report
 // codes for one cell in the 32-bit message (4 bits each)
 const unsigned CODE_UNKNOWN = 0;
 const unsigned CODE_WALL = 1;
@@ -168,12 +168,11 @@ class AI {
   unsigned Encode(const std::string& s);
   std::string Decode(unsigned n);
   unsigned Nib(const std::vector<std::string>& cells, size_t i);
-  uint32_t PackCells(const std::vector<std::string>& cells, int first_nibble,
-                     int count);
-  Coordinates OtherPosition(const Percepts& percepts, size_t j);
+  uint32_t PackCells(const std::vector<std::string>& cells, int pos, int count);
+  Coordinates CalcOtherPosition(const Percepts& percepts, size_t j);
   void LearnRotation(PeerInfo& peer, int their_rotation, unsigned their_move,
                      Coordinates now);
-  void PlaceRay(Coordinates start, int dir, uint32_t word, int first_nibble,
+  void UnpackCells(Coordinates start, int dir, uint32_t word, int first_nibble,
                 int count);
   void ReadPeers(const Percepts& percepts, AgentComm* comms);
   void Publish(const Percepts& percepts, AgentComm* comms, int old_rotation,
