@@ -31,7 +31,12 @@
 #define SELF_SYMBOL "A"
 // other agents would be just number of the agent
 
-#define DEFAULT_MAP_SIZE 70
+#define DEFAULT_MAP_SIZE \
+  160  // I think the worst case scenario is 160x160 - if we start at the corner
+
+// 0 = up, 1 = right, 2 = down, 3 = left (clockwise)
+const int DX[4] = {0, 1, 0, -1};
+const int DY[4] = {-1, 0, 1, 0};
 
 struct Coordinates {
   unsigned short x;
@@ -49,11 +54,6 @@ class AI {
   Costs costs;
   int max_turn;
 
-
-  // 0 = up, 1 = right, 2 = down, 3 = left (clockwise)
-  const int DX[4] = {0, 1, 0, -1};
-  const int DY[4] = {-1, 0, 1, 0};
-
   // additional data
   unsigned num_turns;
   Coordinates agent_position;  // in the begining puts it in the middle
@@ -67,6 +67,10 @@ class AI {
   std::vector<std::vector<std::string>> agent_map;
   // helper methods
   void PrintMap();
+  bool IsInBounds(int x, int y) const;
+  std::string ConvertSymbol(const std::string &symbol) const;
+  void ScanDirection(Coordinates cor, int dir,
+                     const std::vector<std::string> &seen);
   void AddToMap(Coordinates cor, Percepts &percepts);
   std::vector<std::string> ExecuteCommands(std::vector<std::string> cmds,
                                            Percepts &percepts);
