@@ -64,7 +64,7 @@ const int MAX_TELEPORTER_USES = 3;
 // === GLOBAL CONST FOR COMM - this is my baby
 // =================================================
 
-// RD F F F L L R R - described in the report
+// [RD] F F F L L R R - described in the report
 // codes for one cell in the 32-bit message (4 bits each)
 const unsigned CODE_UNKNOWN = 0;
 const unsigned CODE_WALL = 1;
@@ -118,9 +118,7 @@ class AI {
   std::string pending_from;
   std::vector<std::string> used_teleporters;
 
-  // looking behind us and disarming
-  bool looking;
-  Coordinates look_cell;
+  // disarming
   bool probing;
   Coordinates probe_cell;
 
@@ -149,7 +147,7 @@ class AI {
 
   // teleporting
   void ResetMap();
-  void HandleLanding(const Percepts& percepts);
+  void PostTeleport(const Percepts& percepts);
   int TimesUsed(const std::string& teleporter);
 
   // path finding

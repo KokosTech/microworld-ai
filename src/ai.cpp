@@ -27,8 +27,6 @@ AI::AI(unsigned id, unsigned agent_speed, std::mt19937_64* rng, Symbols symbols,
       agent_safe(DEFAULT_MAP_SIZE, std::vector<int>(DEFAULT_MAP_SIZE, 0)),
       no_traps_left(false),
       pending_teleport(false),
-      looking(false),
-      look_cell({0, 0}),
       probing(false),
       probe_cell({0, 0}),
       has_target(false),
@@ -315,10 +313,6 @@ bool AI::LookBehind(std::string& cmd) {
 
     if (!IsInBounds(x, y) || agent_map[y][x] != UNEXPLORED_SYMBOL) continue;
 
-    looking = true;
-    look_cell.x = x;
-    look_cell.y = y;
-
     if (turn == 3) {
       cmd = LEFT;
     } else {
@@ -460,6 +454,55 @@ bool AI::FindNearestTeleporter(Coordinates& target) {
 }
 
 // =================================================
+// === TELEPORT HANDL
+// =================================================
+
+// as i dont have enough time, this is a middle ground solution
+// just having a new map - reset everything !!!!
+void AI::ResetMap() {
+  agent_map.assign(DEFAULT_MAP_SIZE, std::vector<std::string>(
+                                         DEFAULT_MAP_SIZE, UNEXPLORED_SYMBOL));
+  agent_safe.assign(DEFAULT_MAP_SIZE, std::vector<int>(DEFAULT_MAP_SIZE, 0));
+
+  agent_position.x = DEFAULT_MAP_SIZE / 2;
+  agent_position.y = DEFAULT_MAP_SIZE / 2;
+
+  has_target = false;
+  probing = false;
+
+  for (size_t i = 0; i < peers.size(); ++i) peers[i].has_prev = false;
+}
+
+int AI::TimesUsed(const std::string& teleporter) {
+  int count = 0;
+
+  for (size_t i = 0; i < used_teleporters.size(); ++i) {
+    if (used_teleporters[i] == teleporter) ++count;
+  }
+
+  return count;
+}
+
+// track used teleporters and reset map
+// in the future (winter break) - i would track from / to etc
+// just didnt have the time for it
+void AI::PostTeleport(const Percepts& percepts) {
+  pending_teleport = false;
+  used_teleporters.push_back(pending_from);
+
+  // the teleporter leads to itself DO NOT RESET MAP !!!
+  if (percepts.current[0] == pending_from) return;
+  ResetMap();
+}
+
+// =================================================
+// === COMMS - personally i hope no one has thought of this bcz it literally was
+// my brightest moment from the project in the panitza library
+// =================================================
+
+// ...
+
+// =================================================
 // === JUST AI RUN AND DECISION THINGY
 // =================================================
 
@@ -527,8 +570,8 @@ std::vector<std::string> AI::Decide(Percepts& percepts) {
 }
 
 std::vector<std::string> AI::Run(Percepts& percepts, AgentComm* comms) {
-  // handle teleport landing (aka new map)
-  // todo HandleLanding(percepts);
+  // handle teleporting (aka new map)
+  if (pending_teleport) PostTeleport(percepts);
 
   // add percepts to map
   AddToMap(agent_position, percepts);
